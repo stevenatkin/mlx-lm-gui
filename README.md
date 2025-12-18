@@ -44,9 +44,9 @@ MLX Training Studio simplifies the process of fine-tuning large language models 
 
 Under the hood, MLX Training Studio builds on:
 
-- **MLX / `mlx-lm`** for efficient model execution and conversion on Apple Silicon ([`mlx`](https://github.com/ml-explore/mlx), [`mlx-lm`](https://github.com/ml-explore/mlx-lm))
-- **`mlx-lm-lora`** for training loops, data handling, and YAML-driven configuration ([`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora))
-- **`llama_cpp` / `llama.cpp`** for Hugging Face → GGUF conversion workflows ([`llama_cpp`](https://github.com/shamitv/llama_cpp))  
+- **MLX/mlx-lm** for efficient model execution and conversion on Apple Silicon ([mlx](https://github.com/ml-explore/mlx), [mlx-lm](https://github.com/ml-explore/mlx-lm))
+- **mlx-lm-lora** for training loops, data handling, and YAML-driven configuration ([mlx-lm-lora](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora))
+- **llama.cpp** for Hugging Face → GGUF conversion workflows ([llama.cpp](https://github.com/ggerganov/llama.cpp))  
 
 The goal of this app is to **simplify access** to these tools by:
 
@@ -246,6 +246,21 @@ Open **Settings** (⌘, or App Menu → Settings) to configure your Python envir
 1. Click **"Run Smoke Test"** to verify everything is working
    - This runs a quick test to ensure `mlx-lm-lora` is properly installed
    - Check the Output Log for confirmation
+
+#### 5. Configure llama.cpp for GGUF Export (Optional)
+
+If you want to export trained models to GGUF format:
+
+1. Clone the llama.cpp repository:
+   ```bash
+   git clone https://github.com/ggerganov/llama.cpp ~/Development/llama.cpp
+   ```
+
+2. In **Settings → GGUF Conversion (Optional)**, set the **llama.cpp Path** to the cloned directory
+
+3. The app will automatically install the required Python dependencies for conversion
+
+See [GGUF Export via llama.cpp](#gguf-export-via-llamacpp-optional) for more details.
 
 ![Environment Settings](images/image1.png)
 
