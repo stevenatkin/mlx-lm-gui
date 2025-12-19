@@ -575,9 +575,6 @@ struct LoRAStep: View {
                     
                     let keysBinding = Binding<[String]>(
                         get: { 
-                            if config.loraParameters == nil {
-                                config.loraParameters = LoRAParameters()
-                            }
                             return config.loraParameters?.keys ?? []
                         },
                         set: { 
@@ -634,6 +631,12 @@ struct LoRAStep: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            // Initialize loraParameters if nil to avoid state modification during view update
+            if config.loraParameters == nil {
+                config.loraParameters = LoRAParameters()
+            }
+        }
     }
 }
 
