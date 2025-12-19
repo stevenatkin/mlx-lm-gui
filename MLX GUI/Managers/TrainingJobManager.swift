@@ -640,6 +640,11 @@ class TrainingJobManager: ObservableObject {
             return formatDataKeyError(missingKey: missingKey, trainingMode: trainingMode, dataPath: dataPath)
         }
         
+        // Check for unsupported data format errors
+        if errorText.contains("Unsupported data format") || errorText.contains("ValueError") && errorText.contains("data format") {
+            return formatUnsupportedDataFormatError(trainingMode: trainingMode, dataPath: dataPath)
+        }
+        
         // Check for JSON decode errors (malformed JSON, empty lines)
         if errorText.contains("JSONDecodeError") || errorText.contains("json.decoder.JSONDecodeError") || errorText.contains("Expecting value") {
             return formatJSONDecodeError(trainingMode: trainingMode, dataPath: dataPath)
@@ -839,6 +844,104 @@ class TrainingJobManager: ObservableObject {
         4. Make sure you have read permissions for the directory
         
         Note: The validation file must be named 'valid.jsonl' (not 'validation.jsonl')
+        """
+    }
+    
+    /// Format a user-friendly error message for unsupported data format errors
+    private func formatUnsupportedDataFormatError(trainingMode: TrainingMode, dataPath: String) -> String {
+        let expectedFormat: String
+        let exampleFormat: String
+        let commonIssues: String
+        
+        switch trainingMode {
+        case .sft:
+            expectedFormat = """
+            SFT requires one of these formats:
+            • {"prompt": "...", "completion": "..."}
+            • {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
+            • {"text": "full text content"}
+            """
+            exampleFormat = """
+            Valid examples:
+            {"prompt": "What is the capital of France?", "completion": "The capital of France is Paris."}
+            {"messages": [{"role": "user", "content": "What is the capital of France?"}, {"role": "assistant", "content": "Paris."}]}
+            {"text": "Question: What is the capital of France? Answer: Paris."}
+            """
+            commonIssues = """
+            Common issues:
+            • Using wrong key names (e.g., "answer" instead of "completion" for prompt/completion format)
+            • Mixing formats in the same file (all lines must use the same format)
+            • Empty or null values in required fields
+            • Invalid JSON structure in messages array
+            • Missing required keys (prompt/completion, messages, or text)
+            """
+            
+        case .dpo, .cpo:
+            expectedFormat = """
+            DPO/CPO requires this format:
+            • {"prompt": "...", "chosen": "...", "rejected": "..."}
+            • Optional: {"system": "...", "prompt": "...", "chosen": "...", "rejected": "..."}
+            """
+            exampleFormat = """
+            Valid example:
+            {"prompt": "What is the capital of France?", "chosen": "The capital of France is Paris.", "rejected": "France doesn't have a capital."}
+            """
+            commonIssues = """
+            Common issues:
+            • Missing "chosen" or "rejected" keys
+            • Using "completion" or "answer" instead of "chosen"/"rejected"
+            • Empty values in chosen or rejected fields
+            """
+            
+        case .grpo, .gspo, .drGRPO, .dapo:
+            expectedFormat = """
+            \(trainingMode.displayName) requires this format:
+            • {"prompt": "...", "answer": "..."}
+            """
+            exampleFormat = """
+            Valid example:
+            {"prompt": "What is the capital of France?", "answer": "The capital of France is Paris."}
+            """
+            commonIssues = """
+            Common issues:
+            • Using "completion" instead of "answer"
+            • Missing "answer" key
+            • Empty answer values
+            """
+            
+        default:
+            expectedFormat = """
+            Please refer to the mlx-lm-lora documentation for the required data format for \(trainingMode.displayName).
+            """
+            exampleFormat = ""
+            commonIssues = """
+            Check the data format requirements for \(trainingMode.displayName) in the README or mlx-lm-lora documentation.
+            """
+        }
+        
+        return """
+        ❌ Unsupported Data Format Error
+        
+        The training data format is not supported for \(trainingMode.displayName).
+        
+        Training Mode: \(trainingMode.displayName)
+        Data Path: \(dataPath)
+        
+        \(expectedFormat)
+        
+        \(exampleFormat)
+        
+        \(commonIssues)
+        
+        How to fix:
+        1. Open your JSONL files (train.jsonl, valid.jsonl, test.jsonl) in a text editor
+        2. Verify each line matches one of the supported formats above
+        3. Ensure all lines in a file use the same format (don't mix formats)
+        4. Check that all required keys are present and have non-empty values
+        5. Validate that each line is valid JSON (no syntax errors)
+        6. Remove any empty lines from your JSONL files
+        
+        Note: The format must be consistent across all files (train.jsonl, valid.jsonl, test.jsonl).
         """
     }
     

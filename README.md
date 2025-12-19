@@ -88,7 +88,7 @@ The default Python that comes with macOS (`/usr/bin/python3`) is a stub that onl
 
 **To verify your Python installation:**
 ```bash
-python3 --version  # Should show Python 3.8 or later
+python3 --version  # Should show Python 3.12 or later
 which python3      # Should not be /usr/bin/python3
 ```
 
@@ -651,6 +651,21 @@ Refer to the `mlx-lm-lora` documentation for format requirements for other train
   - Check that the model identifier is correct
   - Verify internet connection
   - Try downloading the model manually using `huggingface-cli` to test
+
+### "Unsupported data format" or "ValueError: Unsupported data format for SFT training"
+
+- **Problem**: The data format in your JSONL files doesn't match what `mlx-lm-lora` expects for the selected training mode
+- **Solution**:
+  - Check the [Data Format Requirements](#data-format-requirements) section
+  - For SFT, ensure you're using one of these formats:
+    - `{"prompt": "...", "completion": "..."}`
+    - `{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}`
+    - `{"text": "full text content"}`
+  - **Important**: All lines in a file must use the same format (don't mix formats)
+  - Verify that all required keys are present and have non-empty values
+  - Check that each line is valid JSON (no syntax errors)
+  - Remove any empty lines from your JSONL files
+  - The app will display a detailed error message with format requirements - read it carefully
 
 ### "KeyError" or "Data format mismatch"
 
