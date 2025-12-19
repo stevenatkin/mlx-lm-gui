@@ -46,12 +46,16 @@ struct LRScheduleParameters: Codable, Equatable {
     var name: LRScheduleType = .cosine
     var warmup: Int? = 100  // Default: 100 warmup steps
     var warmupInit: Double? = 1e-7  // Default: 1e-7 initial learning rate for warmup
-    var arguments: [Double]? = nil  // Optional arguments array for scheduler
+    var decaySteps: Int? = nil  // For cosine_decay and linear_schedule: total training steps (defaults to iterations if not set)
+    var finalLR: Double? = nil  // For cosine_decay and linear_schedule: final/end learning rate (defaults to 0.0 for cosine, calculated for linear)
+    var arguments: [Double]? = nil  // Optional arguments array for scheduler (overrides decaySteps/finalLR if set)
     
-    init(name: LRScheduleType = .cosine, warmup: Int? = 100, warmupInit: Double? = 1e-7, arguments: [Double]? = nil) {
+    init(name: LRScheduleType = .cosine, warmup: Int? = 100, warmupInit: Double? = 1e-7, decaySteps: Int? = nil, finalLR: Double? = nil, arguments: [Double]? = nil) {
         self.name = name
         self.warmup = warmup
         self.warmupInit = warmupInit
+        self.decaySteps = decaySteps
+        self.finalLR = finalLR
         self.arguments = arguments
     }
 }

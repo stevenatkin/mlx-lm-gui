@@ -344,6 +344,8 @@ $HF_HOME/hub/models--org--model/
    - Weight decay (for AdamW optimizer)
    - Learning rate schedule (cosine decay, linear, constant)
    - Warmup steps and warmup initial learning rate
+   - Decay steps and final learning rate (for cosine and linear schedules)
+   - Advanced: Manual arguments array for fine-grained control
 
    **Step 5: Mode-Specific Parameters**
    - Parameters specific to your selected training mode

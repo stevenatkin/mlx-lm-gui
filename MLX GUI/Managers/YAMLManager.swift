@@ -189,6 +189,7 @@ class YAMLManager {
                 yaml += "  warmup_init: \(formatNumberForYAML(warmupInit))\n"
             }
             // arguments is REQUIRED by build_schedule, so always include it
+            // decaySteps and finalLR are internal helper fields - they construct the arguments array
             if let arguments = lrSchedule.arguments, !arguments.isEmpty {
                 // Format numbers properly to ensure YAML parses them as numbers, not strings
                 let argsString = arguments.map { arg in
@@ -196,21 +197,23 @@ class YAMLManager {
                 }.joined(separator: ", ")
                 yaml += "  arguments: [\(argsString)]  # passed to scheduler\n"
             } else {
-                // Generate default arguments based on schedule type
+                // Generate arguments from decaySteps/finalLR if set, otherwise use defaults
                 // cosine_decay(init, decay_steps, end=0.0) needs: [init, decay_steps, end]
                 // linear_schedule(init, end, steps) needs: [init, end, steps] - note different order!
                 let defaultArgs: [Double]
                 switch lrSchedule.name {
                 case .cosine:
                     // cosine_decay(init, decay_steps, end=0.0)
-                    // Arguments: [initial_lr, decay_steps, min_lr]
-                    let minLR = max(config.learningRate * 0.1, 1e-7)  // At least 1e-7
-                    defaultArgs = [config.learningRate, Double(config.iterations), minLR]
+                    // Arguments: [initial_lr, decay_steps, end_lr]
+                    let decaySteps = Double(lrSchedule.decaySteps ?? config.iterations)
+                    let endLR = lrSchedule.finalLR ?? 0.0  // Default to 0.0 for cosine_decay
+                    defaultArgs = [config.learningRate, decaySteps, endLR]
                 case .linear:
                     // linear_schedule(init, end, steps) - note: end comes before steps!
-                    // Arguments: [initial_lr, min_lr, steps]
-                    let minLR = max(config.learningRate * 0.1, 1e-7)  // At least 1e-7
-                    defaultArgs = [config.learningRate, minLR, Double(config.iterations)]
+                    // Arguments: [initial_lr, end_lr, steps]
+                    let endLR = lrSchedule.finalLR ?? max(config.learningRate * 0.1, 1e-7)  // Default to 10% of init or 1e-7
+                    let steps = Double(lrSchedule.decaySteps ?? config.iterations)
+                    defaultArgs = [config.learningRate, endLR, steps]
                 case .constant:
                     // For constant, just use the learning rate
                     defaultArgs = [config.learningRate]
@@ -517,6 +520,12 @@ class YAMLManager {
                     config.lrScheduleParams?.warmup = Int(value)
                 case "warmup_init":
                     config.lrScheduleParams?.warmupInit = Double(value)
+                // Note: decay_steps and final_lr are not mlx-lm-lora parameters - they're internal helpers
+                // We parse them for backwards compatibility and manual YAML editing, but they're used to construct arguments
+                case "decay_steps":
+                    config.lrScheduleParams?.decaySteps = Int(value)
+                case "final_lr", "end_lr":
+                    config.lrScheduleParams?.finalLR = Double(value)
                 case "arguments":
                     // Parse array format: [1e-5, 1000, 1e-7]
                     var argsString = value.trimmingCharacters(in: .whitespaces)
@@ -533,6 +542,28 @@ class YAMLManager {
                     }
                     if !arguments.isEmpty {
                         config.lrScheduleParams?.arguments = arguments
+                        
+                        // Extract decaySteps and finalLR from arguments for UI display
+                        // This preserves the user's settings when loading YAML files
+                        if let scheduleName = config.lrScheduleParams?.name {
+                            switch scheduleName {
+                            case .cosine:
+                                // cosine_decay: [init, decay_steps, end]
+                                if arguments.count >= 3 {
+                                    config.lrScheduleParams?.decaySteps = Int(arguments[1])
+                                    config.lrScheduleParams?.finalLR = arguments[2]
+                                }
+                            case .linear:
+                                // linear_schedule: [init, end, steps]
+                                if arguments.count >= 3 {
+                                    config.lrScheduleParams?.finalLR = arguments[1]
+                                    config.lrScheduleParams?.decaySteps = Int(arguments[2])
+                                }
+                            case .constant:
+                                // constant: [init] - no decay steps or final LR
+                                break
+                            }
+                        }
                     }
                 default:
                     break

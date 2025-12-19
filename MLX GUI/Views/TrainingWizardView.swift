@@ -708,8 +708,51 @@ struct OptimizerStep: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 
+                // Decay Steps and Final LR for cosine and linear schedules
+                if config.lrSchedule == .cosine || config.lrSchedule == .linear {
+                    HStack {
+                        Text("Decay Steps:")
+                        TextField("", value: Binding(
+                            get: { config.lrScheduleParams?.decaySteps },
+                            set: { 
+                                if config.lrScheduleParams == nil {
+                                    config.lrScheduleParams = LRScheduleParameters()
+                                }
+                                config.lrScheduleParams?.decaySteps = $0
+                            }
+                        ), format: .number)
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    Text("Total training steps for decay. Defaults to iterations if not set. For cosine_decay and linear_schedule.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    HStack {
+                        Text("Final Learning Rate:")
+                        TextField("", value: Binding(
+                            get: { config.lrScheduleParams?.finalLR },
+                            set: { 
+                                if config.lrScheduleParams == nil {
+                                    config.lrScheduleParams = LRScheduleParameters()
+                                }
+                                config.lrScheduleParams?.finalLR = $0
+                            }
+                        ), format: FloatingPointFormatStyle<Double>.number.notation(.scientific))
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    if config.lrSchedule == .cosine {
+                        Text("Final learning rate (end parameter). Default: 0.0. For cosine_decay: [init, decay_steps, end]")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Final learning rate (end parameter). Default: 10% of initial LR or 1e-7. For linear_schedule: [init, end, steps]")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
                 HStack {
-                    Text("Arguments:")
+                    Text("Arguments (Advanced):")
                     TextField("", text: Binding(
                         get: { 
                             guard let args = config.lrScheduleParams?.arguments else { return "" }
@@ -731,7 +774,7 @@ struct OptimizerStep: View {
                     ))
                     .textFieldStyle(.roundedBorder)
                 }
-                Text("Arguments passed to scheduler (e.g., [1e-5, 1000, 1e-7]). Comma-separated values. (Optional)")
+                Text("Manual arguments override Decay Steps and Final LR. Comma-separated values (e.g., \"1e-5, 2500, 1e-7\"). (Optional)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
