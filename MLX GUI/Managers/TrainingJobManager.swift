@@ -893,7 +893,7 @@ class TrainingJobManager: ObservableObject {
             • Empty values in chosen or rejected fields
             """
             
-        case .grpo, .gspo, .drGRPO, .dapo:
+        case .grpo, .gspo, .drGrpo, .dapo:
             expectedFormat = """
             \(trainingMode.displayName) requires this format:
             • {"prompt": "...", "answer": "..."}
