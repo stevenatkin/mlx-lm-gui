@@ -80,15 +80,26 @@ class YAMLManager {
         yaml += "data: \(quoteString(config.data))\n"
         yaml += "train: true\n"
         
-        // train_type should be "lora" when LoRA parameters are present
-        if config.loraParameters != nil {
+        // train_type
+        if let trainType = config.trainType {
+            yaml += "train_type: \(trainType.rawValue)\n"
+        } else if config.loraParameters != nil {
+            // Default to lora when LoRA parameters are present
             yaml += "train_type: lora\n"
+        }
+        
+        if config.maskPrompt {
+            yaml += "mask_prompt: true\n"
         }
         
         yaml += "train_mode: \(config.trainMode.rawValue)\n"
         
         if let adapterPath = config.adapterPath {
             yaml += "adapter_path: \(quoteString(adapterPath))\n"
+        }
+        
+        if let referenceModelPath = config.referenceModelPath {
+            yaml += "reference_model_path: \(quoteString(referenceModelPath))\n"
         }
         
         // Training parameters
@@ -213,12 +224,28 @@ class YAMLManager {
         if let dpoParams = config.dpoParams {
             yaml += "beta: \(dpoParams.beta)\n"
             yaml += "dpo_cpo_loss_type: \(quoteString(dpoParams.lossType))\n"
+            if let delta = dpoParams.delta {
+                yaml += "delta: \(delta)\n"
+            }
+        }
+        
+        if let orpoParams = config.orpoParams {
+            yaml += "beta: \(orpoParams.beta)\n"
+            yaml += "reward_scaling: \(orpoParams.rewardScaling)\n"
         }
         
         if let grpoParams = config.grpoParams {
             yaml += "group_size: \(grpoParams.groupSize)\n"
             yaml += "temperature: \(grpoParams.temperature)\n"
             yaml += "max_completion_length: \(grpoParams.maxCompletionLength)\n"
+            
+            if let epsilon = grpoParams.epsilon {
+                yaml += "epsilon: \(epsilon)\n"
+            }
+            
+            if let rewardFunctionsFile = grpoParams.rewardFunctionsFile, !rewardFunctionsFile.isEmpty {
+                yaml += "reward_functions_file: \(quoteString(rewardFunctionsFile))\n"
+            }
             
             if !grpoParams.rewardFunctions.isEmpty {
                 yaml += "reward_functions: \"\(grpoParams.rewardFunctions.joined(separator: ","))\"\n"
@@ -252,12 +279,20 @@ class YAMLManager {
             }
             yaml += "alpha: \(onlineParams.alpha)\n"
             
+            if let beta = onlineParams.beta {
+                yaml += "beta: \(beta)\n"
+            }
+            
             if let epsilon = onlineParams.epsilon {
                 yaml += "epsilon: \(epsilon)\n"
             }
             
             if let groupSize = onlineParams.groupSize {
                 yaml += "group_size: \(groupSize)\n"
+            }
+            
+            if let judgeConfig = onlineParams.judgeConfig, !judgeConfig.isEmpty {
+                yaml += "judge_config: \(quoteString(judgeConfig))\n"
             }
         }
         
@@ -266,6 +301,8 @@ class YAMLManager {
             switch quantization {
             case .bits4:
                 yaml += "load_in_4bits: true\n"
+            case .bits6:
+                yaml += "load_in_6bits: true\n"
             case .bits8:
                 yaml += "load_in_8bits: true\n"
             case .none:
@@ -297,6 +334,8 @@ class YAMLManager {
                 switch postQuant {
                 case .bits4:
                     yaml += "post_training_quantization: 4bits\n"
+                case .bits6:
+                    yaml += "post_training_quantization: 6bits\n"
                 case .bits8:
                     yaml += "post_training_quantization: 8bits\n"
                 case .none:
@@ -511,9 +550,16 @@ class YAMLManager {
                 config.data = value
             case "train_type":
                 // train_type is "lora", "dora", or "full"
-                if value == "lora" && config.loraParameters == nil {
-                    config.loraParameters = LoRAParameters()
+                if let trainType = TrainType(rawValue: value) {
+                    config.trainType = trainType
+                    if trainType == .lora && config.loraParameters == nil {
+                        config.loraParameters = LoRAParameters()
+                    }
                 }
+            case "mask_prompt":
+                config.maskPrompt = value.lowercased() == "true"
+            case "reference_model_path":
+                config.referenceModelPath = value.isEmpty ? nil : value
             case "train_mode":
                 if let mode = TrainingMode(rawValue: value) {
                     config.trainMode = mode
@@ -565,15 +611,38 @@ class YAMLManager {
             // Note: warmup_steps should be in lr_schedule.warmup, not at top level
             // Note: weight_decay should be in optimizer_config.<optimizer>.weight_decay
             case "beta":
-                if config.dpoParams == nil {
-                    config.dpoParams = DPOParameters()
+                // Beta can be for DPO, ORPO, XPO, or RLHF Reinforce
+                if config.trainMode == .orpo {
+                    if config.orpoParams == nil {
+                        config.orpoParams = ORPOParameters()
+                    }
+                    config.orpoParams?.beta = Double(value) ?? 0.1
+                } else if config.trainMode == .xpo || config.trainMode == .rlhfReinforce {
+                    if config.onlineParams == nil {
+                        config.onlineParams = OnlineParameters()
+                    }
+                    config.onlineParams?.beta = Double(value)
+                } else if config.trainMode == .dpo || config.trainMode == .cpo {
+                    if config.dpoParams == nil {
+                        config.dpoParams = DPOParameters()
+                    }
+                    config.dpoParams?.beta = Double(value) ?? 0.1
                 }
-                config.dpoParams?.beta = Double(value) ?? 0.1
             case "dpo_cpo_loss_type":
                 if config.dpoParams == nil {
                     config.dpoParams = DPOParameters()
                 }
                 config.dpoParams?.lossType = value
+            case "delta":
+                if config.dpoParams == nil {
+                    config.dpoParams = DPOParameters()
+                }
+                config.dpoParams?.delta = Double(value)
+            case "reward_scaling":
+                if config.orpoParams == nil {
+                    config.orpoParams = ORPOParameters()
+                }
+                config.orpoParams?.rewardScaling = Double(value) ?? 1.0
             case "group_size":
                 if config.grpoParams == nil {
                     config.grpoParams = GRPOParameters()
@@ -589,6 +658,50 @@ class YAMLManager {
                     config.grpoParams = GRPOParameters()
                 }
                 config.grpoParams?.maxCompletionLength = Int(value) ?? 512
+            case "epsilon":
+                // Handle epsilon for both GRPO and Online DPO
+                if config.trainMode.supportsGroupSize {
+                    if config.grpoParams == nil {
+                        config.grpoParams = GRPOParameters()
+                    }
+                    config.grpoParams?.epsilon = Double(value)
+                } else if config.trainMode == .onlineDpo {
+                    if config.onlineParams == nil {
+                        config.onlineParams = OnlineParameters()
+                    }
+                    config.onlineParams?.epsilon = Double(value)
+                }
+            case "reward_functions_file":
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.rewardFunctionsFile = value.isEmpty ? nil : value
+            case "reward_functions":
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                // Parse comma-separated reward function names
+                let functions = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                config.grpoParams?.rewardFunctions = functions
+            case "reward_weights":
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                // Parse JSON array format: [0.7, 0.3] or 0.7, 0.3
+                var weightsString = value.trimmingCharacters(in: .whitespaces)
+                if weightsString.hasPrefix("[") {
+                    weightsString.removeFirst()
+                }
+                if weightsString.hasSuffix("]") {
+                    weightsString.removeLast()
+                }
+                let weights = weightsString.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                config.grpoParams?.rewardWeights = weights
+            case "grpo_loss_type":
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.grpoLossType = value.isEmpty ? nil : value
             case "judge":
                 if config.onlineParams == nil {
                     config.onlineParams = OnlineParameters()
@@ -599,11 +712,11 @@ class YAMLManager {
                     config.onlineParams = OnlineParameters()
                 }
                 config.onlineParams?.alpha = Double(value) ?? 1e-5
-            case "epsilon":
+            case "judge_config":
                 if config.onlineParams == nil {
                     config.onlineParams = OnlineParameters()
                 }
-                config.onlineParams?.epsilon = Double(value)
+                config.onlineParams?.judgeConfig = value.isEmpty ? nil : value
             case "wand":
                 config.wandbProject = value
             case "load_in_4bits":
@@ -611,9 +724,9 @@ class YAMLManager {
                     config.quantization = .bits4
                 }
             case "load_in_6bits":
-                // Note: 6-bit quantization not currently supported in UI, but we can parse it
-                // For now, we'll skip it or could add to QuantizationType enum later
-                break
+                if value.lowercased() == "true" {
+                    config.quantization = .bits6
+                }
             case "load_in_8bits":
                 if value.lowercased() == "true" {
                     config.quantization = .bits8
@@ -629,6 +742,8 @@ class YAMLManager {
             case "post_training_quantization":
                 if value.lowercased() == "4bits" || value == "4" {
                     config.postTrainingQuantization = .bits4
+                } else if value.lowercased() == "6bits" || value == "6" {
+                    config.postTrainingQuantization = .bits6
                 } else if value.lowercased() == "8bits" || value == "8" {
                     config.postTrainingQuantization = .bits8
                 }

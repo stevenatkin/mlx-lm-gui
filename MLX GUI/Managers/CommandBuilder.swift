@@ -33,6 +33,11 @@ class CommandBuilder {
             args.append(adapterPath)
         }
         
+        if let referenceModelPath = config.referenceModelPath {
+            args.append("--reference-model-path")
+            args.append(referenceModelPath)
+        }
+        
         // Training parameters
         args.append("--batch-size")
         args.append(String(config.batchSize))
@@ -82,6 +87,19 @@ class CommandBuilder {
             
             args.append("--dpo-cpo-loss-type")
             args.append(dpoParams.lossType)
+            
+            if let delta = dpoParams.delta {
+                args.append("--delta")
+                args.append(String(delta))
+            }
+        }
+        
+        if let orpoParams = config.orpoParams {
+            args.append("--beta")
+            args.append(String(orpoParams.beta))
+            
+            args.append("--reward-scaling")
+            args.append(String(orpoParams.rewardScaling))
         }
         
         if let grpoParams = config.grpoParams {
@@ -93,6 +111,16 @@ class CommandBuilder {
             
             args.append("--max-completion-length")
             args.append(String(grpoParams.maxCompletionLength))
+            
+            if let epsilon = grpoParams.epsilon {
+                args.append("--epsilon")
+                args.append(String(epsilon))
+            }
+            
+            if let rewardFunctionsFile = grpoParams.rewardFunctionsFile, !rewardFunctionsFile.isEmpty {
+                args.append("--reward-functions-file")
+                args.append(rewardFunctionsFile)
+            }
             
             if !grpoParams.rewardFunctions.isEmpty {
                 args.append("--reward-functions")
@@ -135,6 +163,11 @@ class CommandBuilder {
             args.append("--alpha")
             args.append(String(onlineParams.alpha))
             
+            if let beta = onlineParams.beta {
+                args.append("--beta")
+                args.append(String(beta))
+            }
+            
             if let epsilon = onlineParams.epsilon {
                 args.append("--epsilon")
                 args.append(String(epsilon))
@@ -144,6 +177,21 @@ class CommandBuilder {
                 args.append("--group-size")
                 args.append(String(groupSize))
             }
+            
+            if let judgeConfig = onlineParams.judgeConfig, !judgeConfig.isEmpty {
+                args.append("--judge-config")
+                args.append(judgeConfig)
+            }
+        }
+        
+        // Training type
+        if let trainType = config.trainType {
+            args.append("--train-type")
+            args.append(trainType.rawValue)
+        }
+        
+        if config.maskPrompt {
+            args.append("--mask-prompt")
         }
         
         // Advanced options
@@ -151,6 +199,8 @@ class CommandBuilder {
             switch quantization {
             case .bits4:
                 args.append("--load-in-4bits")
+            case .bits6:
+                args.append("--load-in-6bits")
             case .bits8:
                 args.append("--load-in-8bits")
             case .none:

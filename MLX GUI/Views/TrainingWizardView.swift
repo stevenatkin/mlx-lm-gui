@@ -275,13 +275,13 @@ struct BasicSettingsStep: View {
             }
             
             Section("Quantization") {
-                let isPreQuantized = config.model.lowercased().contains("4bit") || config.model.lowercased().contains("8bit")
+                let isPreQuantized = config.model.lowercased().contains("4bit") || config.model.lowercased().contains("6bit") || config.model.lowercased().contains("8bit")
                 
                 HStack {
                     Text("Quantization:")
                     Picker("", selection: $config.quantization) {
                         Text("None").tag(nil as QuantizationType?)
-                        ForEach([QuantizationType.bits4, QuantizationType.bits8], id: \.self) { q in
+                        ForEach([QuantizationType.bits4, QuantizationType.bits6, QuantizationType.bits8], id: \.self) { q in
                             Text(q.displayName).tag(q as QuantizationType?)
                         }
                     }
@@ -294,7 +294,7 @@ struct BasicSettingsStep: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 } else {
-                    Text("Load the model in quantized format to reduce memory usage. 4-bit uses less memory but may have slightly lower quality. Not applicable for pre-quantized models (those with '4bit' or '8bit' in the name).")
+                    Text("Load the model in quantized format to reduce memory usage. 4-bit uses less memory but may have slightly lower quality. 6-bit provides a balance between memory and quality. 8-bit offers better quality with moderate memory savings. Not applicable for pre-quantized models (those with '4bit', '6bit', or '8bit' in the name).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -743,7 +743,19 @@ struct ModeSpecificStep: View {
     
     var body: some View {
         Form {
-            if config.trainMode.requiresJudgeModel {
+            judgeModelSection
+            dpoCpoSection
+            orpoSection
+            groupBasedSection
+            noParametersSection
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+    
+    @ViewBuilder
+    private var judgeModelSection: some View {
+        if config.trainMode.requiresJudgeModel {
                 Section("Judge Model (Required)") {
                     HStack(alignment: .center, spacing: 8) {
                         Text("Judge Model:")
@@ -794,10 +806,114 @@ struct ModeSpecificStep: View {
                     Text("Alpha parameter in scientific notation (e.g., 1e-5).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    
+                    if config.trainMode == .xpo || config.trainMode == .rlhfReinforce {
+                        HStack {
+                            Text("Beta:")
+                            TextField("", value: Binding(
+                                get: { config.onlineParams?.beta ?? 0.1 },
+                                set: {
+                                    if config.onlineParams == nil {
+                                        config.onlineParams = OnlineParameters()
+                                    }
+                                    config.onlineParams?.beta = $0
+                                }
+                            ), format: .number)
+                            .textFieldStyle(.roundedBorder)
+                        }
+                        Text("KL penalty strength (default: 0.1)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    if config.trainMode == .ppo {
+                        HStack {
+                            Text("Epsilon:")
+                            TextField("", value: Binding(
+                                get: { config.onlineParams?.epsilon ?? 0.2 },
+                                set: {
+                                    if config.onlineParams == nil {
+                                        config.onlineParams = OnlineParameters()
+                                    }
+                                    config.onlineParams?.epsilon = $0
+                                }
+                            ), format: .number)
+                            .textFieldStyle(.roundedBorder)
+                        }
+                        Text("Epsilon for numerical stability (default: 0.2)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    HStack {
+                        Text("Judge Config:")
+                        TextField("", text: Binding(
+                            get: { config.onlineParams?.judgeConfig ?? "" },
+                            set: {
+                                if config.onlineParams == nil {
+                                    config.onlineParams = OnlineParameters()
+                                }
+                                config.onlineParams?.judgeConfig = $0.isEmpty ? nil : $0
+                            }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    Text("Additional configuration for judge model (optional).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            
-            if config.trainMode.requiresReferenceModel {
+    }
+    
+    @ViewBuilder
+    private var orpoSection: some View {
+        if config.trainMode == .orpo {
+            Section("ORPO Parameters") {
+                HStack {
+                    Text("Beta:")
+                    TextField("", value: Binding(
+                        get: { config.orpoParams?.beta ?? 0.1 },
+                        set: {
+                            if config.orpoParams == nil {
+                                config.orpoParams = ORPOParameters()
+                            }
+                            config.orpoParams?.beta = $0
+                        }
+                    ), format: .number)
+                    .textFieldStyle(.roundedBorder)
+                }
+                Text("Beta parameter for ORPO (default: 0.1)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                HStack {
+                    Text("Reward Scaling:")
+                    TextField("", value: Binding(
+                        get: { config.orpoParams?.rewardScaling ?? 1.0 },
+                        set: {
+                            if config.orpoParams == nil {
+                                config.orpoParams = ORPOParameters()
+                            }
+                            config.orpoParams?.rewardScaling = $0
+                        }
+                    ), format: .number)
+                    .textFieldStyle(.roundedBorder)
+                }
+                Text("Reward scaling factor (default: 1.0)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .onAppear {
+                if config.orpoParams == nil {
+                    config.orpoParams = ORPOParameters()
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var dpoCpoSection: some View {
+        if config.trainMode.requiresReferenceModel {
                 Section("DPO/CPO Parameters") {
                     HStack {
                         Text("Beta:")
@@ -826,6 +942,40 @@ struct ModeSpecificStep: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                     }
+                    Text("Loss function: sigmoid (default), hinge, ipo, or dpop")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    if config.dpoParams?.lossType == "hinge" {
+                        HStack {
+                            Text("Delta:")
+                            TextField("", value: Binding(
+                                get: { config.dpoParams?.delta ?? 50.0 },
+                                set: {
+                                    if config.dpoParams == nil {
+                                        config.dpoParams = DPOParameters()
+                                    }
+                                    config.dpoParams?.delta = $0
+                                }
+                            ), format: .number)
+                            .textFieldStyle(.roundedBorder)
+                        }
+                        Text("Margin for hinge loss (default: 50.0)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    HStack {
+                        Text("Reference Model Path:")
+                        TextField("", text: Binding(
+                            get: { config.referenceModelPath ?? "" },
+                            set: { config.referenceModelPath = $0.isEmpty ? nil : $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    Text("Path to reference model (optional). Uses main model if not specified.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .onAppear {
                     // Auto-initialize if nil
@@ -834,72 +984,250 @@ struct ModeSpecificStep: View {
                     }
                 }
             }
-            
-            if config.trainMode.supportsGroupSize {
-                Section("Group-Based Parameters") {
-                    HStack {
-                        Text("Group Size:")
-                        TextField("", value: Binding(
-                            get: { config.grpoParams?.groupSize ?? 4 },
-                            set: {
-                                if config.grpoParams == nil {
-                                    config.grpoParams = GRPOParameters()
-                                }
-                                config.grpoParams?.groupSize = $0
-                            }
-                        ), format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        Stepper("", value: Binding(
-                            get: { config.grpoParams?.groupSize ?? 4 },
-                            set: {
-                                if config.grpoParams == nil {
-                                    config.grpoParams = GRPOParameters()
-                                }
-                                config.grpoParams?.groupSize = $0
-                            }
-                        ), in: 1...32)
-                    }
-                    
-                    HStack {
-                        Text("Temperature:")
-                        TextField("", value: Binding(
-                            get: { config.grpoParams?.temperature ?? 1.0 },
-                            set: {
-                                if config.grpoParams == nil {
-                                    config.grpoParams = GRPOParameters()
-                                }
-                                config.grpoParams?.temperature = $0
-                            }
-                        ), format: .number)
-                        .textFieldStyle(.roundedBorder)
-                    }
-                }
-                .onAppear {
-                    // Auto-initialize if nil
-                    if config.grpoParams == nil {
-                        config.grpoParams = GRPOParameters()
-                    }
-                }
+    }
+    
+    @ViewBuilder
+    private var groupBasedSection: some View {
+        if config.trainMode.supportsGroupSize {
+            Section("Group-Based Parameters") {
+                basicGRPOParameters
+                epsilonField
+                rewardFunctionsSection
+                grpoLossTypePicker
             }
-            
-            // Show message if no mode-specific parameters are needed
-            if !config.trainMode.requiresJudgeModel && 
-               !config.trainMode.requiresReferenceModel && 
-               !config.trainMode.supportsGroupSize {
-                Section("Mode-Specific Parameters") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("No additional parameters required")
-                            .font(.headline)
-                        Text("The selected training mode (\(config.trainMode.displayName)) does not require any mode-specific parameters. You can proceed to the next step.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 8)
+            .onAppear {
+                // Auto-initialize if nil
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
                 }
             }
         }
-        .formStyle(.grouped)
-        .padding()
+    }
+    
+    @ViewBuilder
+    private var basicGRPOParameters: some View {
+        HStack {
+            Text("Group Size:")
+            TextField("", value: groupSizeBinding, format: .number)
+                .textFieldStyle(.roundedBorder)
+            Stepper("", value: groupSizeBinding, in: 1...32)
+        }
+        
+        HStack {
+            Text("Temperature:")
+            TextField("", value: temperatureBinding, format: .number)
+                .textFieldStyle(.roundedBorder)
+        }
+        
+        HStack {
+            Text("Max Completion Length:")
+            TextField("", value: maxCompletionLengthBinding, format: .number)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+    
+    @ViewBuilder
+    private var epsilonField: some View {
+        if config.trainMode == .grpo || config.trainMode == .drGrpo {
+            HStack {
+                Text("Epsilon:")
+                TextField("", value: epsilonBinding, format: .number)
+                    .textFieldStyle(.roundedBorder)
+            }
+            Text("Numerical stability constant (default: 1e-4)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    @ViewBuilder
+    private var rewardFunctionsSection: some View {
+        if config.trainMode.supportsRewardFunctions {
+            HStack {
+                Text("Reward Functions File:")
+                TextField("", text: rewardFunctionsFileBinding)
+                    .textFieldStyle(.roundedBorder)
+                Button("Browse…") {
+                    let panel = NSOpenPanel()
+                    panel.allowsMultipleSelection = false
+                    panel.canChooseDirectories = false
+                    panel.canChooseFiles = true
+                    panel.allowedContentTypes = [.pythonScript, .text, .item]
+                    
+                    if panel.runModal() == .OK {
+                        if let url = panel.url {
+                            if config.grpoParams == nil {
+                                config.grpoParams = GRPOParameters()
+                            }
+                            config.grpoParams?.rewardFunctionsFile = url.path
+                        }
+                    }
+                }
+            }
+            Text("Path to custom reward functions Python file (optional). If provided, use --reward-functions to specify which functions to use.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                Text("Reward Functions:")
+                TextField("", text: rewardFunctionsBinding)
+                    .textFieldStyle(.roundedBorder)
+            }
+            Text("Comma-separated reward function names (e.g., \"accuracy_reward,format_reward\")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                Text("Reward Weights:")
+                TextField("", text: rewardWeightsBinding)
+                    .textFieldStyle(.roundedBorder)
+            }
+            Text("Comma-separated weights for each reward function (e.g., \"0.7, 0.3\"). Must match the number of reward functions.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    @ViewBuilder
+    private var grpoLossTypePicker: some View {
+        if config.trainMode == .drGrpo {
+            HStack {
+                Text("GRPO Loss Type:")
+                Picker("", selection: grpoLossTypeBinding) {
+                    Text("grpo").tag("grpo")
+                    Text("bnpo").tag("bnpo")
+                    Text("dr_grpo").tag("dr_grpo")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text("Loss variant: grpo (default), bnpo, or dr_grpo")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    // MARK: - Binding Helpers
+    
+    private var groupSizeBinding: Binding<Int> {
+        Binding(
+            get: { config.grpoParams?.groupSize ?? 4 },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.groupSize = $0
+            }
+        )
+    }
+    
+    private var temperatureBinding: Binding<Double> {
+        Binding(
+            get: { config.grpoParams?.temperature ?? 0.8 },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.temperature = $0
+            }
+        )
+    }
+    
+    private var maxCompletionLengthBinding: Binding<Int> {
+        Binding(
+            get: { config.grpoParams?.maxCompletionLength ?? 512 },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.maxCompletionLength = $0
+            }
+        )
+    }
+    
+    private var epsilonBinding: Binding<Double> {
+        Binding(
+            get: { config.grpoParams?.epsilon ?? 1e-4 },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.epsilon = $0
+            }
+        )
+    }
+    
+    private var rewardFunctionsFileBinding: Binding<String> {
+        Binding(
+            get: { config.grpoParams?.rewardFunctionsFile ?? "" },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.rewardFunctionsFile = $0.isEmpty ? nil : $0
+            }
+        )
+    }
+    
+    private var rewardFunctionsBinding: Binding<String> {
+        Binding(
+            get: { config.grpoParams?.rewardFunctions.joined(separator: ", ") ?? "" },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                // Parse comma-separated function names
+                let functions = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                config.grpoParams?.rewardFunctions = functions
+            }
+        )
+    }
+    
+    private var rewardWeightsBinding: Binding<String> {
+        Binding(
+            get: {
+                let weights = config.grpoParams?.rewardWeights ?? []
+                return weights.map { String($0) }.joined(separator: ", ")
+            },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                // Parse comma-separated weights
+                let weights = $0.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                config.grpoParams?.rewardWeights = weights
+            }
+        )
+    }
+    
+    private var grpoLossTypeBinding: Binding<String> {
+        Binding(
+            get: { config.grpoParams?.grpoLossType ?? "grpo" },
+            set: {
+                if config.grpoParams == nil {
+                    config.grpoParams = GRPOParameters()
+                }
+                config.grpoParams?.grpoLossType = $0
+            }
+        )
+    }
+    
+    @ViewBuilder
+    private var noParametersSection: some View {
+        // Show message if no mode-specific parameters are needed
+        if !config.trainMode.requiresJudgeModel && 
+           !config.trainMode.requiresReferenceModel && 
+           !config.trainMode.supportsGroupSize {
+            Section("Mode-Specific Parameters") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No additional parameters required")
+                        .font(.headline)
+                    Text("The selected training mode (\(config.trainMode.displayName)) does not require any mode-specific parameters. You can proceed to the next step.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            }
+        }
     }
 }
 
@@ -909,6 +1237,34 @@ struct AdvancedStep: View {
     
     var body: some View {
         Form {
+            if config.trainMode == .sft {
+                Section("Training Type") {
+                    HStack {
+                        Text("Train Type:")
+                        Picker("", selection: Binding(
+                            get: { config.trainType ?? .lora },
+                            set: { config.trainType = $0 }
+                        )) {
+                            ForEach(TrainType.allCases, id: \.self) { type in
+                                Text(type.displayName).tag(type)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Text("LoRA: Low-rank adaptation (default, efficient). DoRA: Weight-decomposed LoRA. Full: Full fine-tuning (requires more memory).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    HStack {
+                        Text("Mask Prompt:")
+                        Toggle("", isOn: $config.maskPrompt)
+                    }
+                    Text("Apply loss only to assistant responses (useful for instruction tuning).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
             Section("WandB") {
                 HStack {
                     Text("Project Name:")

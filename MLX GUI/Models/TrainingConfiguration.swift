@@ -59,12 +59,14 @@ struct LRScheduleParameters: Codable, Equatable {
 enum QuantizationType: String, Codable {
     case none = "none"
     case bits4 = "4bits"
+    case bits6 = "6bits"
     case bits8 = "8bits"
     
     var displayName: String {
         switch self {
         case .none: return "None"
         case .bits4: return "4-bit"
+        case .bits6: return "6-bit"
         case .bits8: return "8-bit"
         }
     }
@@ -99,12 +101,27 @@ enum GGUFOutType: String, Codable, CaseIterable {
     }
 }
 
+enum TrainType: String, Codable, CaseIterable {
+    case lora = "lora"
+    case dora = "dora"
+    case full = "full"
+    
+    var displayName: String {
+        switch self {
+        case .lora: return "LoRA (Low-Rank Adaptation)"
+        case .dora: return "DoRA (Weight-Decomposed Low-Rank Adaptation)"
+        case .full: return "Full Fine-Tuning"
+        }
+    }
+}
+
 struct TrainingConfiguration: Codable, Equatable {
     // MARK: - Basic Settings
     var model: String = ""
     var data: String = ""
     var trainMode: TrainingMode = .sft
     var adapterPath: String? = nil
+    var referenceModelPath: String? = nil  // For DPO/CPO (uses main model if not specified)
     
     // MARK: - Training Parameters
     var batchSize: Int = 4
@@ -123,6 +140,10 @@ struct TrainingConfiguration: Codable, Equatable {
     
     // MARK: - Resume Training
     var resumeAdapterFile: String? = nil  // Path to adapter weights to resume from
+    
+    // MARK: - Training Type
+    var trainType: TrainType? = nil  // nil means default (lora when loraParameters present)
+    var maskPrompt: Bool = false  // Apply loss only to assistant responses
     
     // MARK: - LoRA Configuration
     var loraParameters: LoRAParameters? = LoRAParameters()
@@ -158,6 +179,7 @@ struct TrainingConfiguration: Codable, Equatable {
     var dpoParams: DPOParameters? = nil
     var grpoParams: GRPOParameters? = nil
     var onlineParams: OnlineParameters? = nil
+    var orpoParams: ORPOParameters? = nil
     
     // MARK: - Advanced Options
     var quantization: QuantizationType? = nil
