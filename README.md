@@ -347,11 +347,18 @@ $HF_HOME/hub/models--org--model/
 
    **Step 5: Mode-Specific Parameters**
    - Parameters specific to your selected training mode
-   - For example: DPO beta, GRPO group size, etc.
+   - **DPO/CPO**: Beta, loss type (sigmoid, hinge, ipo, dpop), delta (for hinge loss), reference model path
+   - **ORPO**: Beta, reward scaling
+   - **GRPO/GSPO/Dr. GRPO/DAPO**: Group size, temperature, max completion length, epsilon, reward functions file, reward functions, reward weights, GRPO loss type
+   - **Online DPO/XPO/RLHF Reinforce/PPO**: Judge model, alpha, beta (XPO/RLHF Reinforce), epsilon (PPO), group size, judge config
 
    **Step 6: Advanced Options**
+   - **Training Type (SFT only)**:
+     - Choose between LoRA (default, efficient), DoRA (weight-decomposed LoRA), or Full fine-tuning
+   - **Mask Prompt (SFT only)**:
+     - Apply loss only to assistant responses (useful for instruction tuning)
    - **Model Quantization at Load Time**:
-     - Choose whether to load the base model in 4-bit or 8-bit mode (or leave unquantized).
+     - Choose whether to load the base model in 4-bit, 6-bit, or 8-bit mode (or leave unquantized)
    - **Weights & Biases Integration**:
      - Optional project name for logging to Weights & Biases.
    - **Test Mode**:
